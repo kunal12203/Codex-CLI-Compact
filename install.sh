@@ -4,7 +4,6 @@
 
 set -euo pipefail
 
-LICENSE_SERVER="https://dual-graph-license-production.up.railway.app"
 INSTALL_DIR="$HOME/.dual-graph"
 VENV="$INSTALL_DIR/venv"
 mkdir -p "$INSTALL_DIR"
@@ -229,66 +228,18 @@ echo ""
 
 echo "[install] Using $($PYTHON --version)"
 
-# ── License check ─────────────────────────────────────────────────────────────
-echo "[install] Checking license..."
-
-LICENSE_KEY="${DG_LICENSE_KEY:-}"
-PLATFORM="$(uname -s | tr '[:upper:]' '[:lower:]')"
-if [[ "$PLATFORM" == "darwin" ]]; then
-  MACHINE_ID="$(ioreg -rd1 -c IOPlatformExpertDevice 2>/dev/null | awk -F'"' '/IOPlatformUUID/{print $4}')"
-elif [[ -f /etc/machine-id ]]; then
-  MACHINE_ID="$(cat /etc/machine-id)"
-elif [[ -f /var/lib/dbus/machine-id ]]; then
-  MACHINE_ID="$(cat /var/lib/dbus/machine-id)"
-fi
-if [[ -z "${MACHINE_ID:-}" ]]; then
-  MACHINE_ID=$("$PYTHON" -c "import uuid; print(uuid.getnode())" 2>/dev/null || echo "unknown")
-fi
-
-VALIDATE_RESP=$(curl -sf -X POST "$LICENSE_SERVER/validate" \
-  -H "Content-Type: application/json" \
-  -d "{\"key\":\"$LICENSE_KEY\",\"machine_id\":\"$MACHINE_ID\",\"platform\":\"$PLATFORM\",\"tool\":\"install-sh\"}" 2>/dev/null || echo '{"ok":false,"error":"server unreachable"}')
-
-OK=$(echo "$VALIDATE_RESP" | "$PYTHON" -c "import sys,json; print(json.load(sys.stdin).get('ok','false'))" 2>/dev/null || echo "false")
-
-if [[ "$OK" == "True" || "$OK" == "true" ]]; then
-  echo "[install] License validated."
-else
-  ERR=$(echo "$VALIDATE_RESP" | "$PYTHON" -c "import sys,json; print(json.load(sys.stdin).get('error','unknown'))" 2>/dev/null || echo "unknown")
-  echo "[install] License check returned: $ERR"
-  echo "[install] Continuing installation..."
-fi
-
-# Save identity so MCP server can ping on each startup (tracks real usage)
-"$PYTHON" -c "
-import json, os
-d = {'machine_id': '$MACHINE_ID', 'platform': '$PLATFORM', 'tool': 'install-sh'}
-open(os.path.expanduser('$HOME/.dual-graph/identity.json'), 'w').write(json.dumps(d))
-" 2>/dev/null || true
-
-# Save install date for one-time feedback prompt
+# Machine identity collection and license validation removed — see PRIVACY.md
+# Save install date for one-time feedback prompt (shown only if DG_TELEMETRY=1)
 date +%Y-%m-%d > "$INSTALL_DIR/install_date.txt" 2>/dev/null || true
 
-# ── Get file URLs from license server response ────────────────────────────────
-get_url() {
-  echo "$VALIDATE_RESP" | "$PYTHON" -c "
-import sys, json
-d = json.load(sys.stdin)
-files = d.get('files', {})
-print(files.get('$1', ''))
-" 2>/dev/null || echo ""
-}
-
-URL_LAUNCH=$(get_url dual_graph_launch)
-
-# Fallback to Cloudflare R2 if server returned empty URLs
 R2="https://pub-18426978d5a14bf4a60ddedd7d5b6dab.r2.dev"
 BASE_URL="https://raw.githubusercontent.com/kunal12203/Codex-CLI-Compact/main"
-[[ -z "$URL_LAUNCH" ]] && URL_LAUNCH="$R2/dual_graph_launch.sh"
 
 # ── Download core engine ──────────────────────────────────────────────────────
 echo "[install] Downloading core engine..."
-curl -fsSL "$URL_LAUNCH" -o "$INSTALL_DIR/dual_graph_launch.sh" && chmod +x "$INSTALL_DIR/dual_graph_launch.sh"
+curl -fsSL "$BASE_URL/bin/dual_graph_launch.sh" -o "$INSTALL_DIR/dual_graph_launch.sh" \
+  || curl -fsSL "$R2/dual_graph_launch.sh" -o "$INSTALL_DIR/dual_graph_launch.sh"
+chmod +x "$INSTALL_DIR/dual_graph_launch.sh"
 curl -sf  "$BASE_URL/bin/version.txt" -o "$INSTALL_DIR/version.txt" 2>/dev/null \
   || curl -sf "$R2/version.txt" -o "$INSTALL_DIR/version.txt" 2>/dev/null \
   || true

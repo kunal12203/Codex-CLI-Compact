@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+# dgc-mcp — stdio MCP wrapper for dual-graph
+#
+# Register as a global Claude MCP server so dual-graph works with plain `claude`:
+#   claude mcp add --scope user --transport stdio dual-graph -- ~/.dual-graph/dgc-mcp
+#
+# Claude spawns this on session start, kills it on exit.
+# Detects project root from cwd, ensures venv + graperoot, runs MCP in stdio mode.
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+VENV="$SCRIPT_DIR/venv"
+
+if [[ "$OSTYPE" == msys* || "$OSTYPE" == cygwin* || "$OSTYPE" == win32* ]]; then
+  VENV_BIN="$VENV/Scripts"
+else
+  VENV_BIN="$VENV/bin"
+fi
+
+# Ensure venv exists
+if [[ ! -x "$VENV_BIN/python3" ]] && [[ ! -x "$VENV_BIN/python" ]]; then
+  python3 -m venv "$VENV" 2>/dev/null
+  "$VENV_BIN/pip" install --quiet "mcp>=1.3.0" uvicorn anyio starlette graperoot 2>/dev/null
+fi
+
+if [[ -x "$VENV_BIN/python3" ]]; then
+  PYTHON="$VENV_BIN/python3"
+else
+  PYTHON="$VENV_BIN/python"
+fi
+
+# Ensure graperoot is installed
+if ! "$PYTHON" -c "import graperoot" 2>/dev/null; then
+  "$VENV_BIN/pip" install --quiet graperoot 2>/dev/null
+fi
+
+# Project root = cwd (Claude sets this to the project directory)
+export DUAL_GRAPH_PROJECT_ROOT="$(pwd)"
+export DG_DATA_DIR="$(pwd)/.dual-graph"
+
+# Prefer compiled graperoot entry point with --stdio if supported,
+# fall back to local .py source if available
+if "$VENV_BIN/mcp-graph-server" --stdio --check 2>/dev/null; then
+  exec "$VENV_BIN/mcp-graph-server" --stdio
+elif [[ -f "$SCRIPT_DIR/mcp_graph_server.py" ]]; then
+  exec "$PYTHON" "$SCRIPT_DIR/mcp_graph_server.py" --stdio
+else
+  # Last resort: graperoot compiled, no --stdio yet — run anyway
+  exec "$VENV_BIN/mcp-graph-server" --stdio
+fi

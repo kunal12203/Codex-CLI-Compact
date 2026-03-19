@@ -6,6 +6,15 @@
 
 set -Eeuo pipefail
 
+# Opt-in flags (off by default — see PRIVACY.md)
+# DG_TELEMETRY=1  → enable error reporting and feedback form
+# DG_AUTO_UPDATE=1 → enable launcher self-update
+# --no-update      → suppress auto-update for this invocation
+_DG_NO_UPDATE=0
+for _arg in "$@"; do
+  [[ "$_arg" == "--no-update" ]] && _DG_NO_UPDATE=1
+done
+
 ASSISTANT="${1:-}"
 if [[ "$ASSISTANT" != "codex" && "$ASSISTANT" != "claude" ]]; then
   echo "Usage: $0 <codex|claude> [project_path] [prompt]" >&2
@@ -56,63 +65,12 @@ _platform_name() {
 }
 
 _machine_id() {
-  python3 - "$SCRIPT_DIR/identity.json" <<'PY' 2>/dev/null || echo "unknown"
-import json
-import os
-import platform
-import subprocess
-import sys
-import uuid
-from pathlib import Path
-
-identity_path = Path(sys.argv[1])
-
-def get_machine_id() -> str:
-    sys_name = platform.system()
-    try:
-        if sys_name == "Darwin":
-            out = subprocess.check_output(
-                ["ioreg", "-rd1", "-c", "IOPlatformExpertDevice"],
-                stderr=subprocess.DEVNULL,
-                timeout=3,
-            ).decode()
-            for line in out.splitlines():
-                if "IOPlatformUUID" in line:
-                    return line.split('"')[3]
-        elif sys_name == "Linux":
-            for p in ("/etc/machine-id", "/var/lib/dbus/machine-id"):
-                try:
-                    val = Path(p).read_text().strip()
-                    if val:
-                        return val
-                except OSError:
-                    pass
-    except Exception:
-        pass
-    return str(uuid.getnode())
-
-try:
-    if identity_path.exists():
-        data = json.loads(identity_path.read_text(encoding="utf-8"))
-        mid = data.get("machine_id", "").strip()
-        if mid:
-            print(mid)
-            raise SystemExit(0)
-    mid = get_machine_id()
-    identity_path.parent.mkdir(parents=True, exist_ok=True)
-    payload = {
-        "machine_id": mid,
-        "platform": platform.system().lower(),
-        "tool": "launcher-auto",
-    }
-    identity_path.write_text(json.dumps(payload), encoding="utf-8")
-    print(mid)
-except Exception:
-    print("unknown")
-PY
+  # Machine identity collection removed — see PRIVACY.md
+  echo "disabled"
 }
 
 _send_cli_error() {
+  [[ "${DG_TELEMETRY:-}" == "1" ]] || return 0
   local step="$1"
   local message="$2"
   local machine_id platform payload
@@ -223,44 +181,46 @@ else
   POLICY_MARKER="dgc-policy-v10"
 fi
 
-# ── Self-update ────────────────────────────────────────────────────────────────
-_R2="https://pub-18426978d5a14bf4a60ddedd7d5b6dab.r2.dev"
-_BASE_URL="https://raw.githubusercontent.com/kunal12203/Codex-CLI-Compact/main"
+# ── Self-update (opt-in: DG_AUTO_UPDATE=1, suppressed by --no-update) ─────────
 _LOCAL_VER="$(cat "$SCRIPT_DIR/version.txt" 2>/dev/null || echo "0")"
-_REMOTE_VER="$(
-  curl -sf --max-time 3 "$_BASE_URL/bin/version.txt" 2>/dev/null \
-    || curl -sf --max-time 3 "$_R2/version.txt" 2>/dev/null \
-    || echo ""
-)"
-_NOTICE_FILE="$SCRIPT_DIR/last_update_notice.txt"
+if [[ "${DG_AUTO_UPDATE:-}" == "1" ]] && [[ "$_DG_NO_UPDATE" != "1" ]]; then
+  _R2="https://pub-18426978d5a14bf4a60ddedd7d5b6dab.r2.dev"
+  _BASE_URL="https://raw.githubusercontent.com/kunal12203/Codex-CLI-Compact/main"
+  _REMOTE_VER="$(
+    curl -sf --max-time 3 "$_BASE_URL/bin/version.txt" 2>/dev/null \
+      || curl -sf --max-time 3 "$_R2/version.txt" 2>/dev/null \
+      || echo ""
+  )"
+  _NOTICE_FILE="$SCRIPT_DIR/last_update_notice.txt"
 
-if [[ -n "$_REMOTE_VER" ]] && _version_gt "$_REMOTE_VER" "$_LOCAL_VER"; then
-  _LAST_NOTICE_VER="$(cat "$_NOTICE_FILE" 2>/dev/null || echo "")"
-  if [[ "$_LAST_NOTICE_VER" != "$_REMOTE_VER" ]]; then
-    if [[ "$OSTYPE" == "darwin"* ]]; then
-      echo "[$TOOL_LABEL] New version ($_LOCAL_VER -> $_REMOTE_VER) available. To refresh launcher files run:"
-      echo "[$TOOL_LABEL]   curl -sSL https://raw.githubusercontent.com/kunal12203/Codex-CLI-Compact/main/install.sh | bash"
-    else
-      echo "[$TOOL_LABEL] New version ($_LOCAL_VER -> $_REMOTE_VER) available. To refresh launcher files run:"
-      echo "[$TOOL_LABEL]   curl -sSL https://raw.githubusercontent.com/kunal12203/Codex-CLI-Compact/main/install.sh | bash"
+  if [[ -n "$_REMOTE_VER" ]] && _version_gt "$_REMOTE_VER" "$_LOCAL_VER"; then
+    _LAST_NOTICE_VER="$(cat "$_NOTICE_FILE" 2>/dev/null || echo "")"
+    if [[ "$_LAST_NOTICE_VER" != "$_REMOTE_VER" ]]; then
+      if [[ "$OSTYPE" == "darwin"* ]]; then
+        echo "[$TOOL_LABEL] New version ($_LOCAL_VER -> $_REMOTE_VER) available. To refresh launcher files run:"
+        echo "[$TOOL_LABEL]   curl -sSL https://raw.githubusercontent.com/kunal12203/Codex-CLI-Compact/main/install.sh | bash"
+      else
+        echo "[$TOOL_LABEL] New version ($_LOCAL_VER -> $_REMOTE_VER) available. To refresh launcher files run:"
+        echo "[$TOOL_LABEL]   curl -sSL https://raw.githubusercontent.com/kunal12203/Codex-CLI-Compact/main/install.sh | bash"
+      fi
+      echo "$_REMOTE_VER" > "$_NOTICE_FILE" 2>/dev/null || true
     fi
-    echo "$_REMOTE_VER" > "$_NOTICE_FILE" 2>/dev/null || true
+    echo "[$TOOL_LABEL] Update available ($_LOCAL_VER → $_REMOTE_VER) — updating..."
+    curl -fsSL "$_BASE_URL/bin/dual_graph_launch.sh" -o "$SCRIPT_DIR/dual_graph_launch.sh" \
+      || curl -fsSL "$_R2/dual_graph_launch.sh" -o "$SCRIPT_DIR/dual_graph_launch.sh"
+    chmod +x "$SCRIPT_DIR/dual_graph_launch.sh"
+    echo "$_REMOTE_VER" > "$SCRIPT_DIR/version.txt"
+    # Upgrade graperoot so venv gets latest mcp_graph_server + compiled modules
+    if [[ -x "$VENV_BIN/pip" ]]; then
+      "$VENV_BIN/pip" install graperoot --upgrade --quiet 2>/dev/null || true
+    fi
+    echo "[$TOOL_LABEL] Updated to $_REMOTE_VER. Restarting..."
+    EXEC_ARGS=("$SCRIPT_DIR/dual_graph_launch.sh" "$ASSISTANT" "$PROJECT")
+    [[ -n "$PROMPT" ]] && EXEC_ARGS+=("$PROMPT")
+    exec "${EXEC_ARGS[@]}"
+  elif [[ -n "$_REMOTE_VER" && "$_REMOTE_VER" != "$_LOCAL_VER" ]]; then
+    echo "[$TOOL_LABEL] Local version ($_LOCAL_VER) is newer than remote ($_REMOTE_VER); skipping downgrade."
   fi
-  echo "[$TOOL_LABEL] Update available ($_LOCAL_VER → $_REMOTE_VER) — updating..."
-  curl -fsSL "$_BASE_URL/bin/dual_graph_launch.sh" -o "$SCRIPT_DIR/dual_graph_launch.sh" \
-    || curl -fsSL "$_R2/dual_graph_launch.sh" -o "$SCRIPT_DIR/dual_graph_launch.sh"
-  chmod +x "$SCRIPT_DIR/dual_graph_launch.sh"
-  echo "$_REMOTE_VER" > "$SCRIPT_DIR/version.txt"
-  # Upgrade graperoot so venv gets latest mcp_graph_server + compiled modules
-  if [[ -x "$VENV_BIN/pip" ]]; then
-    "$VENV_BIN/pip" install graperoot --upgrade --quiet 2>/dev/null || true
-  fi
-  echo "[$TOOL_LABEL] Updated to $_REMOTE_VER. Restarting..."
-  EXEC_ARGS=("$SCRIPT_DIR/dual_graph_launch.sh" "$ASSISTANT" "$PROJECT")
-  [[ -n "$PROMPT" ]] && EXEC_ARGS+=("$PROMPT")
-  exec "${EXEC_ARGS[@]}"
-elif [[ -n "$_REMOTE_VER" && "$_REMOTE_VER" != "$_LOCAL_VER" ]]; then
-  echo "[$TOOL_LABEL] Local version ($_LOCAL_VER) is newer than remote ($_REMOTE_VER); skipping downgrade."
 fi
 # ──────────────────────────────────────────────────────────────────────────────
 
@@ -1161,10 +1121,10 @@ else
   # ───────────────────────────────────────────────────────────────────────────
 fi
 
-# ── One-time feedback form ─────────────────────────────────────────────────────
+# ── One-time feedback form (opt-in: DG_TELEMETRY=1) ───────────────────────────
 _FEEDBACK_DONE="$SCRIPT_DIR/feedback_done"
 _INSTALL_DATE_FILE="$SCRIPT_DIR/install_date.txt"
-if [[ ! -f "$_FEEDBACK_DONE" ]] && [[ -t 0 ]]; then
+if [[ "${DG_TELEMETRY:-}" == "1" ]] && [[ ! -f "$_FEEDBACK_DONE" ]] && [[ -t 0 ]]; then
   _SHOW_FEEDBACK=1
   if [[ -f "$_INSTALL_DATE_FILE" ]]; then
     _INSTALL_DATE="$(cat "$_INSTALL_DATE_FILE")"
