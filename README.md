@@ -4,7 +4,7 @@ A context engine that makes Claude Code and Codex CLI **30-45% cheaper** without
 
 Works on **macOS, Linux, and Windows**. Supports any project size.
 
-**Join the community: [discord.gg/rxgVVgCh](https://discord.gg/rxgVVgCh)**
+**Join the community: [discord.gg/xe7Hr5Dx](https://discord.gg/xe7Hr5Dx)**
 
 ---
 
@@ -212,7 +212,7 @@ Remove-Item "$env:USERPROFILE\.claude\token-counter-stop.ps1" -Force -ErrorActio
 
 Have a question, found a bug, or want to share feedback?
 
-**Join the Discord: [discord.gg/rxgVVgCh](https://discord.gg/rxgVVgCh)**
+**Join the Discord: [discord.gg/xe7Hr5Dx](https://discord.gg/xe7Hr5Dx)**
 
 - Get help with setup
 - Report bugs
