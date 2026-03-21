@@ -47,6 +47,7 @@ dump.rdb
 
 # Local project graphs (per-project, stays on machine)
 .dual-graph/
+.dual-graph/graph_snapshots/
 .dual-graph-context/
 benchmark/dgc-claude/
 benchmark/normal-claude/

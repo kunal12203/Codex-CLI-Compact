@@ -472,6 +472,9 @@ try {
     Write-Host "[$Tool] Project : $resolvedProject"
     Write-Host "[$Tool] Data    : $DataDir"
     Write-Host ""
+    # Snapshot existing info_graph.json before rescan (fail-safe — never blocks scan)
+    try { & $Python (Join-Path $PSScriptRoot "graph_snapshot.py") $DataDir "auto" 2>$null } catch {}
+
     Write-Host "[$Tool] Scanning project..."
     if ($grapeOk) {
         & (Join-Path $VenvBin "graph-builder.exe") --root $resolvedProject --out (Join-Path $DataDir "info_graph.json") 2> $scanErr

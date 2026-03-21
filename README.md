@@ -113,6 +113,8 @@ All data lives in `<project>/.dual-graph/` (gitignored automatically).
 | `chat_action_graph.json` | Session memory: reads, edits, queries, decisions |
 | `context-store.json` | Persistent store for decisions/tasks/facts across sessions |
 | `mcp_server.log` | MCP server logs |
+| `graph_snapshots/info_graph_<ts>.json` | Timestamped snapshot of info_graph.json saved before each rescan. Last 5 retained. |
+| `graph_snapshots/info_graph_<ts>.meta.json` | Sidecar metadata: scan trigger, file count, and action log offset at snapshot time. Links a snapshot directly to the mcp_tool_calls.jsonl entries that followed. |
 
 Global files in `~/.dual-graph/`:
 | File | Description |

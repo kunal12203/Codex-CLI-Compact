@@ -737,6 +737,9 @@ Keep ``CONTEXT.md`` under 20 lines total. Do NOT summarize the full conversation
     # under the global $ErrorActionPreference = "Stop".
     $prevEAPNative = $ErrorActionPreference; $ErrorActionPreference = "Continue"
 
+    # Snapshot existing info_graph.json before rescan (fail-safe — never blocks scan)
+    try { & $Python (Join-Path $PSScriptRoot "graph_snapshot.py") $DataDir "auto" 2>$null } catch {}
+
     Write-Host "[$Tool] Scanning project..."
     if ($grapeOk) {
         & (Join-Path $VenvBin "graph-builder.exe") --root $resolvedProject --out (Join-Path $DataDir "info_graph.json") 2> $scanErr
