@@ -1,6 +1,8 @@
-# Dual-Graph — Compounding Context for Claude Code & Codex CLI
+# Dual-Graph — Compounding Context for AI Coding Assistants
 
-A context engine that makes Claude Code and Codex CLI **30-45% cheaper** without sacrificing quality. It builds a semantic graph of your codebase and pre-loads the right files into every prompt — so Claude spends tokens reasoning, not exploring.
+A context engine that makes AI coding assistants **30-45% cheaper** without sacrificing quality. It builds a semantic graph of your codebase and pre-loads the right files into every prompt — so your assistant spends tokens reasoning, not exploring.
+
+**Supported assistants:** Claude Code, Codex CLI, OpenCode, Cursor, Gemini CLI, and GitHub Copilot.
 
 Works on **macOS, Linux, and Windows**. Supports any project size.
 
@@ -13,12 +15,12 @@ Supports **TypeScript, JavaScript, Python, Go, Swift, Rust, Java, Kotlin, C#, Ru
 ## How It Works
 
 ```
-You run: dgc /path/to/project
+You run: graperoot /path/to/project --claude   (or --codex, --opencode, --cursor, --gemini, --copilot)
          ↓
 1. Project scanned → semantic graph built (files, symbols, imports)
 2. You ask a question
 3. Graph identifies the relevant files → packs them into context
-4. Claude gets your question + the right code already loaded
+4. Your assistant gets your question + the right code already loaded
 5. Fewer turns, fewer tokens, better answers
 ```
 
@@ -60,24 +62,31 @@ scoop bucket add dual-graph https://github.com/kunal12203/scoop-dual-graph
 scoop install dual-graph
 ```
 
-**Prerequisites:** Python 3.10+, Node.js 18+, Claude Code or Codex CLI. The installer detects missing tools and offers to install them via winget (Windows) or homebrew (macOS).
+**Prerequisites:** Python 3.10+, Node.js 18+, and at least one supported assistant (Claude Code, Codex CLI, OpenCode, Cursor, Gemini CLI, or GitHub Copilot). The installer detects missing tools and offers to install them via winget (Windows) or homebrew (macOS).
 
 ---
 
 ## Usage
 
-### Claude Code (`dgc`)
+### Unified launcher (`graperoot`)
 
 ```bash
-dgc                              # scan current directory, launch Claude
-dgc /path/to/project             # scan a specific project
-dgc /path/to/project "fix the login bug"   # start with a prompt
+graperoot /path/to/project --claude      # Claude Code (default)
+graperoot /path/to/project --codex       # OpenAI Codex CLI
+graperoot /path/to/project --opencode    # OpenCode
+graperoot /path/to/project --cursor      # Cursor IDE
+graperoot /path/to/project --gemini      # Gemini CLI
+graperoot /path/to/project --copilot     # GitHub Copilot (VS Code)
 ```
 
-### Codex CLI (`dg`)
+### Shorthand commands
 
 ```bash
-dg                               # scan current directory, launch Codex
+dgc                              # scan current directory, launch Claude Code
+dgc /path/to/project             # scan a specific project
+dgc /path/to/project "fix the login bug"   # start with a prompt
+
+dg                               # scan current directory, launch Codex CLI
 dg /path/to/project              # scan a specific project
 dg /path/to/project "add tests"  # start with a prompt
 ```
@@ -85,9 +94,10 @@ dg /path/to/project "add tests"  # start with a prompt
 ### Windows
 
 ```powershell
-dgc .                            # from inside the project directory
-dgc "D:\projects\my-app"         # any drive, any path
-dg "C:\work\backend"             # Codex CLI
+graperoot . --claude             # from inside the project directory
+graperoot . --opencode           # OpenCode
+dgc "D:\projects\my-app"         # shorthand for Claude Code
+dg "C:\work\backend"             # shorthand for Codex CLI
 ```
 
 ---
@@ -95,9 +105,9 @@ dg "C:\work\backend"             # Codex CLI
 ## What It Does Under the Hood
 
 1. **Scans your project** — extracts files, functions, classes, import relationships into a local graph. Supports TS/JS, Python, Go, Swift, Rust, Java, Kotlin, C#, Ruby, and PHP.
-2. **Pre-loads context** — when you ask a question, the graph ranks relevant files and packs them into the prompt before Claude sees it. No extra tool calls needed.
+2. **Pre-loads context** — when you ask a question, the graph ranks relevant files and packs them into the prompt before your assistant sees it. No extra tool calls needed.
 3. **Remembers across turns** — files you've read or edited are prioritized in future turns. Context compounds.
-4. **MCP tools available** — Claude can still explore the codebase via graph-aware tools (`graph_read`, `graph_retrieve`, `graph_neighbors`, etc.) when it needs to go deeper.
+4. **MCP tools available** — your assistant can still explore the codebase via graph-aware tools (`graph_read`, `graph_retrieve`, `graph_neighbors`, etc.) when it needs to go deeper.
 
 All processing is local. No code leaves your machine.
 
