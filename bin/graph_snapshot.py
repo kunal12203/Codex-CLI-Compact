@@ -111,8 +111,6 @@ def _rotate_snapshots(snap_dir: Path) -> None:
     while len(snapshots) > MAX_SNAPSHOTS:
         oldest = snapshots.pop(0)
         oldest.unlink(missing_ok=True)
-        meta = oldest.with_suffix("").with_suffix(".meta.json")
-        # The meta file name is info_graph_<ts>.meta.json
         meta_path = oldest.parent / oldest.name.replace(".json", ".meta.json")
         meta_path.unlink(missing_ok=True)
 
