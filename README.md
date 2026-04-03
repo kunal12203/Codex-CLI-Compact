@@ -15,7 +15,8 @@ Supports **TypeScript, JavaScript, Python, Go, Swift, Rust, Java, Kotlin, C#, Ru
 ## How It Works
 
 ```
-You run: graperoot /path/to/project --claude   (or --codex, --opencode, --cursor, --gemini, --copilot)
+You run: dgc /path/to/project                  # Claude Code shorthand
+         graperoot /path/to/project --claude  # or via unified launcher
          ↓
 1. Project scanned → semantic graph built (files, symbols, imports)
 2. You ask a question
