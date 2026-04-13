@@ -247,6 +247,44 @@ The launcher scripts (`bin/`) are open source under Apache 2.0. PRs are welcome 
 
 **Note:** The graph engine ([`graperoot`](https://pypi.org/project/graperoot/)) is a separate proprietary component distributed via PyPI. The launcher scripts and tooling in this repo are fully open source; the core graph intelligence is not. See [graperoot.dev/graperoot-pro](https://graperoot.dev/graperoot-pro) for Pro features.
 
+### Local Development
+
+Use dual-graph to develop dual-graph — the repo ships with configuration to bootstrap itself.
+
+**Prerequisites:** Python 3.10+, [`graperoot`](https://pypi.org/project/graperoot/) installed.
+
+```bash
+# 1. Install dependencies (includes graperoot)
+make install
+
+# 2. Build the semantic graph for this repo (run once, re-run after major changes)
+make graph-scan
+```
+
+**Claude Code (recommended):** The fastest path — launches Claude with the graph MCP active:
+
+```bash
+make graph-dgc     # dgc . under the hood
+```
+
+**Claude Code (manual, static MCP):** If you want to open Claude Code directly without the
+`dgc` launcher, start the MCP server separately then open Claude:
+
+```bash
+make graph-start   # starts mcp-graph-server on port 8080 (uses .mcp.json)
+claude             # Claude Code auto-connects via project-level .mcp.json
+make graph-stop    # when done
+```
+
+**Codex CLI:**
+
+```bash
+make graph-dg      # dg . under the hood
+```
+
+The `.mcp.json` at the project root wires Claude Code to `http://localhost:8080/mcp` when
+`make graph-start` is running. This is equivalent to what `dgc .` sets up dynamically.
+
 ---
 
 ## Community
