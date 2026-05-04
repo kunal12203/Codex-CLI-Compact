@@ -1,4 +1,4 @@
-<!-- dgc-policy-v10 -->
+<!-- dgc-policy-v11 -->
 # Dual-Graph Context Policy
 
 This project uses a local dual-graph MCP server for efficient context retrieval.

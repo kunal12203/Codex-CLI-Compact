@@ -1,0 +1,85 @@
+#!/usr/bin/env bash
+# dg-mcp — Standalone Dual-Graph MCP server (no IDE)
+#
+# Usage:
+#   dg-mcp                          # start MCP server for current directory
+#   dg-mcp /path/to/project         # start MCP server for given project
+#   dg-mcp --help                   # show usage
+#
+# Runs the MCP server without launching Cursor, Claude, Codex, or any IDE.
+# Useful for: running MCP in a container, custom integrations, remote development.
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT="${1:-.}"
+
+# Handle --help
+if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
+  cat << 'HELP'
+dg-mcp — Standalone Dual-Graph MCP server (no IDE launch)
+
+USAGE:
+  dg-mcp [project_path]
+
+EXAMPLES:
+  dg-mcp                     # Start MCP for current directory
+  dg-mcp /path/to/project    # Start MCP for a specific project
+
+OPTIONS:
+  --help, -h                 Show this help message
+  --no-telemetry             Disable telemetry (one-time opt-out)
+  --port N                   Use a specific port (default: auto 8080+)
+
+ENVIRONMENT VARIABLES:
+  DG_MCP_PORT                Use a specific port instead of auto-selecting
+
+OUTPUT:
+  Prints MCP server URL and connection info to stdout.
+  Keep the process running to maintain the server.
+  Press Ctrl+C to stop.
+
+HELP
+  exit 0
+fi
+
+# Parse flags
+DISABLE_TELEMETRY=0
+PREFER_PORT=""
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --no-telemetry)
+      DISABLE_TELEMETRY=1
+      shift
+      ;;
+    --port)
+      PREFER_PORT="$2"
+      shift 2
+      ;;
+    --port=*)
+      PREFER_PORT="${1#--port=}"
+      shift
+      ;;
+    -*)
+      echo "Unknown option: $1" >&2
+      exit 1
+      ;;
+    *)
+      PROJECT="$1"
+      shift
+      ;;
+  esac
+done
+
+# Set environment variable for port preference if provided
+[[ -n "$PREFER_PORT" ]] && export DG_MCP_PORT="$PREFER_PORT"
+
+# Set telemetry opt-out if requested
+if [[ "$DISABLE_TELEMETRY" == "1" ]]; then
+  export DG_DISABLE_TELEMETRY="1"
+fi
+
+# Delegate to main launcher with special mode: don't launch any IDE, just MCP
+export DG_MCP_ONLY="1"
+exec "$SCRIPT_DIR/dual_graph_launch.sh" "mcp-only" "$PROJECT"

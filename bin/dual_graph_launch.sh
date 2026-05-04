@@ -3,14 +3,16 @@
 # Wrapper scripts:
 #   dg  -> codex
 #   dgc -> claude
+#   dg-mcp -> mcp-only (standalone server, no IDE)
 
 set -Eeuo pipefail
 
 ASSISTANT="${1:-}"
 ASSISTANT="${ASSISTANT#--}"   # strip leading -- so --claude == claude
 if [[ "$ASSISTANT" != "codex" && "$ASSISTANT" != "claude" && "$ASSISTANT" != "cursor" \
-   && "$ASSISTANT" != "gemini" && "$ASSISTANT" != "opencode" && "$ASSISTANT" != "copilot" ]]; then
-  echo "Usage: $0 <codex|claude|cursor|gemini|opencode|copilot> [project_path] [prompt]" >&2
+   && "$ASSISTANT" != "gemini" && "$ASSISTANT" != "opencode" && "$ASSISTANT" != "copilot" \
+   && "$ASSISTANT" != "mcp-only" ]]; then
+  echo "Usage: $0 <codex|claude|cursor|gemini|opencode|copilot|mcp-only> [project_path] [prompt]" >&2
   exit 2
 fi
 shift
@@ -44,6 +46,10 @@ _in_list() { local needle="$1"; shift; for v in "$@"; do [[ "$v" == "$needle" ]]
 
 while (( $# > 0 )); do
   case "$1" in
+    --no-telemetry)
+      export DG_DISABLE_TELEMETRY="1"
+      shift
+      ;;
     --)
       shift
       CLAUDE_EXTRA_ARGS+=("$@")
@@ -105,9 +111,10 @@ TELEMETRY_WEBHOOK="https://script.google.com/macros/s/AKfycbyq_5igbBUORhSqMNktAo
 FEEDBACK_WEBHOOK="https://script.google.com/macros/s/AKfycbyq_5igbBUORhSqMNktAoX2GQg8BadKcYZOTV-XRUr3vbY3QuK7jjS8EWLg_pZyMDuD/exec"
 
 case "$ASSISTANT" in
-  codex)  TOOL_LABEL="dg" ;;
-  claude) TOOL_LABEL="dgc" ;;
-  *)      TOOL_LABEL="graperoot" ;;
+  codex)    TOOL_LABEL="dg" ;;
+  claude)   TOOL_LABEL="dgc" ;;
+  mcp-only) TOOL_LABEL="dg-mcp" ;;
+  *)        TOOL_LABEL="graperoot" ;;
 esac
 
 echo ""
@@ -191,6 +198,11 @@ PY
 }
 
 _get_telemetry_consent() {
+  # Check environment variable first (allows CLI override via --no-telemetry)
+  if [[ "${DG_DISABLE_TELEMETRY:-}" == "1" ]]; then
+    echo "disabled"
+    return
+  fi
   python3 -c "
 import json, sys
 from pathlib import Path
@@ -1429,6 +1441,9 @@ PY
 fi
 # ──────────────────────────────────────────────────────────────────────────────
 
+# Skip IDE/MCP registration for mcp-only mode (server is already running)
+if [[ "$ASSISTANT" != "mcp-only" ]]; then
+
 if [[ "$ASSISTANT" == "codex" ]]; then
   CURRENT_STEP="Registering MCP"
 
@@ -1823,6 +1838,8 @@ PY
   echo "[$TOOL_LABEL]   Copilot Chat panel -> Agent mode -> enable 'dual-graph'"
 fi
 
+fi  # End of "if [[ "$ASSISTANT" != "mcp-only" ]]"
+
 # ── First-run: show all available commands ────────────────────────────────────
 _INSTALL_DATE_FILE="$SCRIPT_DIR/install_date.txt"
 if [[ ! -f "$_INSTALL_DATE_FILE" ]]; then
@@ -1876,7 +1893,8 @@ CURRENT_STEP="Pre-flight checks"
 
 # 1. Verify the CLI tool is installed and in PATH (should already be fixed at registration step, but double-check)
 # For cursor/copilot, bin was resolved at registration; skip the PATH check.
-if [[ "$ASSISTANT" != "cursor" && "$ASSISTANT" != "copilot" ]] && ! command -v "$ASSISTANT" &>/dev/null; then
+# mcp-only mode doesn't need any CLI.
+if [[ "$ASSISTANT" != "cursor" && "$ASSISTANT" != "copilot" && "$ASSISTANT" != "mcp-only" ]] && ! command -v "$ASSISTANT" &>/dev/null; then
   # Refresh PATH one more time
   export PATH="$PATH:$(npm config get prefix 2>/dev/null)/bin:$HOME/.npm-global/bin:$HOME/.local/bin"
   if ! command -v "$ASSISTANT" &>/dev/null; then
@@ -1907,8 +1925,9 @@ fi
 
 # 3. Quick smoke test — verify CLI responds (catches broken installs, missing deps)
 # cursor is validated via CURSOR_BIN at registration time; skip --version check for it.
+# mcp-only mode doesn't need CLI validation.
 _SMOKE_BIN="${CURSOR_BIN:-${CODE_BIN:-$ASSISTANT}}"
-if [[ "$ASSISTANT" != "cursor" && "$ASSISTANT" != "copilot" ]] && ! "$_SMOKE_BIN" --version &>/dev/null 2>&1; then
+if [[ "$ASSISTANT" != "cursor" && "$ASSISTANT" != "copilot" && "$ASSISTANT" != "mcp-only" ]] && ! "$_SMOKE_BIN" --version &>/dev/null 2>&1; then
   echo "[$TOOL_LABEL] WARNING: '$ASSISTANT --version' failed. The CLI may not work correctly."
   case "$ASSISTANT" in
     claude)   echo "[$TOOL_LABEL] Try reinstalling: npm install -g @anthropic-ai/claude-code" ;;
@@ -1930,6 +1949,22 @@ fi
 
 # ── Launch CLI ───────────────────────────────────────────────────────────────
 echo ""
+
+# MCP-only mode: keep server running, skip IDE launch
+if [[ "$ASSISTANT" == "mcp-only" ]]; then
+  echo "[$TOOL_LABEL] MCP server running on port $MCP_PORT"
+  echo "[$TOOL_LABEL] Project: $PROJECT"
+  echo "[$TOOL_LABEL] Data: $DATA_DIR"
+  echo ""
+  echo "[$TOOL_LABEL] Connection info:"
+  echo "[$TOOL_LABEL]   HTTP:  http://127.0.0.1:$MCP_PORT"
+  echo "[$TOOL_LABEL]   MCP:   http://127.0.0.1:$MCP_PORT/mcp"
+  echo ""
+  echo "[$TOOL_LABEL] Press Ctrl+C to stop the server."
+  trap 'echo ""; echo "[$TOOL_LABEL] Shutting down MCP server (PID $MCP_PID)..."; kill "$MCP_PID" 2>/dev/null; rm -f "$RUN_DIR/mcp_server.pid" "$RUN_DIR/mcp_port"; exit 0' INT TERM HUP
+  while true; do sleep 1 & wait $!; done
+fi
+
 echo "[$TOOL_LABEL] Starting $ASSISTANT..."
 echo ""
 
