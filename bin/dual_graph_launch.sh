@@ -1458,8 +1458,8 @@ rm -f "$_SCAN_ERR_FILE" 2>/dev/null || true
 echo "[$TOOL_LABEL] Scan complete."
 echo ""
 
-# HTTP server is always started — used by prime.sh hooks and non-Claude assistants.
-# For Claude with stdio, the MCP connection bypasses it (no port dependency).
+# HTTP server is always started — used by Claude (HTTP transport), prime.sh hooks,
+# and non-Claude assistants. Stdio remains only as a compatibility fallback.
 echo "[$TOOL_LABEL] Port    : $MCP_PORT"
 echo ""
 
@@ -1865,49 +1865,56 @@ PY
 
   _MCP_REG_OK=0
   _MCP_REG_ERR=""
+  _CLAUDE_TRANSPORT=""
 
-  # Stdio mode: Claude Code spawns the MCP server directly — no port needed.
-  if [[ "$_GRAPEROOT_OK" == "1" ]]; then
-    _STDIO_CMD=("$VENV_BIN/mcp-graph-server" "--stdio")
-  else
-    _STDIO_CMD=("$PYTHON" "$SCRIPT_DIR/mcp_graph_server.py" "--stdio")
-  fi
+  # HTTP primary: Claude Code talks to the already-running MCP server over HTTP.
+  _MCP_URL="http://127.0.0.1:$MCP_PORT/mcp"
 
-  if _MCP_REG_ERR="$(claude mcp add dual-graph \
-    -e DG_DATA_DIR="$DATA_DIR" \
-    -e DUAL_GRAPH_PROJECT_ROOT="$PROJECT" \
-    -- "${_STDIO_CMD[@]}" 2>&1)"; then
+  if _MCP_REG_ERR="$(claude mcp add --transport http dual-graph "$_MCP_URL" 2>&1)"; then
     _MCP_REG_OK=1
+    _CLAUDE_TRANSPORT="http"
+  elif _MCP_REG_ERR="$(claude mcp add --transport sse dual-graph "$_MCP_URL" 2>&1)"; then
+    _MCP_REG_OK=1
+    _CLAUDE_TRANSPORT="sse"
+  elif _MCP_REG_ERR="$(claude mcp add dual-graph "$_MCP_URL" 2>&1)"; then
+    _MCP_REG_OK=1
+    _CLAUDE_TRANSPORT="http"
   fi
 
-  # Fallback: if stdio registration fails (old claude CLI), try HTTP
+  # Stdio fallback: older claude CLI without --transport support, or HTTP disabled.
   if [[ "$_MCP_REG_OK" != "1" ]]; then
-    if _MCP_REG_ERR="$(claude mcp add --transport http dual-graph "http://127.0.0.1:$MCP_PORT/mcp" 2>&1)"; then
-      _MCP_REG_OK=1
-      _CLAUDE_NEEDS_HTTP=1
-    elif _MCP_REG_ERR="$(claude mcp add --transport sse dual-graph "http://127.0.0.1:$MCP_PORT/mcp" 2>&1)"; then
-      _MCP_REG_OK=1
-      _CLAUDE_NEEDS_HTTP=1
-    elif _MCP_REG_ERR="$(claude mcp add dual-graph "http://127.0.0.1:$MCP_PORT/mcp" 2>&1)"; then
-      _MCP_REG_OK=1
-      _CLAUDE_NEEDS_HTTP=1
+    if [[ "$_GRAPEROOT_OK" == "1" ]]; then
+      _STDIO_CMD=("$VENV_BIN/mcp-graph-server" "--stdio")
+    else
+      _STDIO_CMD=("$PYTHON" "$SCRIPT_DIR/mcp_graph_server.py" "--stdio")
     fi
-  fi
-
-  if [[ "$_MCP_REG_OK" != "1" ]]; then
-    # Auto-fix: update CLI and retry once
-    echo "[$TOOL_LABEL] MCP registration failed — updating claude CLI and retrying..."
-    npm install -g @anthropic-ai/claude-code >/dev/null 2>&1 || true
-    export PATH="$PATH:$(npm config get prefix 2>/dev/null)/bin"
-    claude mcp remove dual-graph >/dev/null 2>&1 || true
     if _MCP_REG_ERR="$(claude mcp add dual-graph \
       -e DG_DATA_DIR="$DATA_DIR" \
       -e DUAL_GRAPH_PROJECT_ROOT="$PROJECT" \
       -- "${_STDIO_CMD[@]}" 2>&1)"; then
       _MCP_REG_OK=1
-    elif _MCP_REG_ERR="$(claude mcp add --transport http dual-graph "http://127.0.0.1:$MCP_PORT/mcp" 2>&1)"; then
+      _CLAUDE_TRANSPORT="stdio"
+    fi
+  fi
+
+  if [[ "$_MCP_REG_OK" != "1" ]]; then
+    # Auto-fix: update CLI and retry once (HTTP-first, stdio as last resort).
+    echo "[$TOOL_LABEL] MCP registration failed — updating claude CLI and retrying..."
+    npm install -g @anthropic-ai/claude-code >/dev/null 2>&1 || true
+    export PATH="$PATH:$(npm config get prefix 2>/dev/null)/bin"
+    claude mcp remove dual-graph >/dev/null 2>&1 || true
+    if _MCP_REG_ERR="$(claude mcp add --transport http dual-graph "$_MCP_URL" 2>&1)"; then
       _MCP_REG_OK=1
-      _CLAUDE_NEEDS_HTTP=1
+      _CLAUDE_TRANSPORT="http"
+    elif _MCP_REG_ERR="$(claude mcp add --transport sse dual-graph "$_MCP_URL" 2>&1)"; then
+      _MCP_REG_OK=1
+      _CLAUDE_TRANSPORT="sse"
+    elif _MCP_REG_ERR="$(claude mcp add dual-graph \
+      -e DG_DATA_DIR="$DATA_DIR" \
+      -e DUAL_GRAPH_PROJECT_ROOT="$PROJECT" \
+      -- "${_STDIO_CMD[@]}" 2>&1)"; then
+      _MCP_REG_OK=1
+      _CLAUDE_TRANSPORT="stdio"
     fi
   fi
 
@@ -1922,11 +1929,11 @@ PY
     exit 1
   fi
 
-  if [[ "${_CLAUDE_NEEDS_HTTP:-}" == "1" ]]; then
-    echo "[$TOOL_LABEL] MCP config updated -> http://127.0.0.1:$MCP_PORT/mcp (HTTP fallback)"
-  else
-    echo "[$TOOL_LABEL] MCP config updated -> stdio (no port needed)"
-  fi
+  case "$_CLAUDE_TRANSPORT" in
+    http) echo "[$TOOL_LABEL] MCP config updated -> $_MCP_URL (HTTP)" ;;
+    sse)  echo "[$TOOL_LABEL] MCP config updated -> $_MCP_URL (SSE)" ;;
+    stdio) echo "[$TOOL_LABEL] MCP config updated -> stdio (HTTP unavailable, fallback)" ;;
+  esac
 
 
   # ── Token Counter MCP (global user scope — works in all projects) ────────
