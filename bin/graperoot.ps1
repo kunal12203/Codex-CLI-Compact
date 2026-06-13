@@ -11,6 +11,8 @@
 #   graperoot [path] --copilot      GitHub Copilot (VS Code)
 #   graperoot [path] --antigravity  Google Antigravity
 #   graperoot [path] --openclaw     OpenClaw
+#   graperoot [path] --kiro         Kiro CLI
+#   graperoot [path] --command-code Command Code
 
 param(
     [Parameter(Position = 0)] [string]$Arg0 = ".",
@@ -25,6 +27,8 @@ param(
     [switch]$copilot,
     [switch]$antigravity,
     [switch]$openclaw,
+    [switch]$kiro,
+    [switch]${command-code},
     [string]$toolname = "graperoot"
 )
 
@@ -85,6 +89,8 @@ if ($Arg0 -in @("--help","-h","?","/?")) {
     Write-Host "    --copilot      GitHub Copilot (VS Code)"
     Write-Host "    --antigravity  Google Antigravity"
     Write-Host "    --openclaw     OpenClaw"
+    Write-Host "    --kiro         Kiro CLI"
+    Write-Host "    --command-code Command Code"
     Write-Host ""
     Write-Host "  Options:"
     Write-Host "    --resume <id>    Resume a previous claude / codex session"
@@ -98,6 +104,8 @@ if ($Arg0 -in @("--help","-h","?","/?")) {
     Write-Host "    graperoot C:\my\project --copilot"
     Write-Host "    graperoot C:\my\project --antigravity"
     Write-Host "    graperoot C:\my\project --openclaw"
+    Write-Host "    graperoot C:\my\project --kiro"
+    Write-Host "    graperoot C:\my\project --command-code"
     Write-Host "    graperoot C:\my\project --claude --resume <session-id>"
     Write-Host "    dgc .                        # same as graperoot . --claude"
     Write-Host "    dg  .                        # same as graperoot . --codex"
@@ -121,7 +129,7 @@ $env:DG_TOOLNAME = $RuntimeToolName
 $Assistant   = "claude"   # default
 $ProjectPath = ""
 $Passthrough = @()
-$_validTools = @("claude","codex","cursor","gemini","opencode","copilot","antigravity","openclaw")
+$_validTools = @("claude","codex","cursor","gemini","opencode","copilot","antigravity","openclaw","kiro","command-code")
 $_toolSet    = $false
 $_inputArgs  = @($Arg0, $Arg1, $Arg2)
 if ($args) { $_inputArgs += $args }
@@ -134,6 +142,8 @@ elseif ($gemini)      { $Assistant = "gemini";       $_toolSet = $true }
 elseif ($copilot)     { $Assistant = "copilot";      $_toolSet = $true }
 elseif ($antigravity) { $Assistant = "antigravity";  $_toolSet = $true }
 elseif ($openclaw)    { $Assistant = "openclaw";     $_toolSet = $true }
+elseif ($kiro)        { $Assistant = "kiro";         $_toolSet = $true }
+elseif (${command-code}) { $Assistant = "command-code"; $_toolSet = $true }
 elseif ($codex)       { $Assistant = "codex";        $_toolSet = $true }
 elseif ($claude)      { $Assistant = "claude";       $_toolSet = $true }
 
@@ -148,6 +158,8 @@ while ($_argIndex -lt $_inputArgs.Count) {
     if ($arg -in @("--copilot","copilot"))       { $Assistant = "copilot";      $_toolSet = $true; $_argIndex++; continue }
     if ($arg -in @("--antigravity","antigravity")) { $Assistant = "antigravity"; $_toolSet = $true; $_argIndex++; continue }
     if ($arg -in @("--openclaw","openclaw"))       { $Assistant = "openclaw";    $_toolSet = $true; $_argIndex++; continue }
+    if ($arg -in @("--kiro","kiro"))               { $Assistant = "kiro";        $_toolSet = $true; $_argIndex++; continue }
+    if ($arg -in @("--command-code","command-code","--commandcode","commandcode")) { $Assistant = "command-code"; $_toolSet = $true; $_argIndex++; continue }
     if ($arg -match '^-{1,2}toolname=(.*)$') {
         $RuntimeToolName = Normalize-ToolName $Matches[1]
         $env:DG_TOOLNAME = $RuntimeToolName
@@ -871,6 +883,120 @@ with open(config_file, 'w', encoding='utf-8') as f:
     Write-Host "[$Tool] Starting openclaw agent..."
     Write-Host ""
     openclaw agent --local --message "I am ready to help. The dual-graph MCP server is connected - use graph_continue to start."
+}
+
+# -- Kiro CLI: write .kiro/settings/mcp.json and launch ------------------------
+if ($Assistant -eq "kiro") {
+    if (-not (Get-Command kiro-cli -ErrorAction SilentlyContinue)) {
+        Write-Host "[$Tool] kiro-cli not found - installing..."
+        try {
+            $kiroInstaller = Invoke-WebRequest "https://kiro.dev/install.ps1" -UseBasicParsing -TimeoutSec 30
+            Invoke-Expression $kiroInstaller.Content
+        } catch {}
+        $env:PATH = [System.Environment]::GetEnvironmentVariable("PATH", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("PATH", "User")
+        if (-not (Get-Command kiro-cli -ErrorAction SilentlyContinue)) {
+            Write-Host "[$Tool] ERROR: could not auto-install kiro-cli."
+            Write-Host "[$Tool]   Visit https://kiro.dev/downloads/ to install manually."
+            Stop-Process -Id $mcpProc.Id -Force -ErrorAction SilentlyContinue
+            exit 1
+        }
+        Write-Host "[$Tool] kiro-cli installed."
+    }
+
+    # Write .kiro/settings/mcp.json (workspace scope)
+    $KiroDir = Join-Path $ProjectPath ".kiro\settings"
+    New-Item -ItemType Directory -Force -Path $KiroDir | Out-Null
+    $KiroConf = Join-Path $KiroDir "mcp.json"
+    $kiroExisting = [PSCustomObject]@{ mcpServers = [PSCustomObject]@{} }
+    if (Test-Path $KiroConf) {
+        try {
+            $parsed = Get-Content $KiroConf -Raw | ConvertFrom-Json
+            if ($parsed) { $kiroExisting = $parsed }
+        } catch {}
+    }
+    if (-not $kiroExisting.mcpServers) {
+        $kiroExisting | Add-Member -NotePropertyName "mcpServers" -NotePropertyValue ([PSCustomObject]@{}) -Force
+    }
+    $kiroExisting.mcpServers | Add-Member -NotePropertyName "dual-graph" `
+        -NotePropertyValue ([PSCustomObject]@{ url = "http://127.0.0.1:$McpPort/mcp" }) -Force
+    $kiroTmp = [System.IO.Path]::GetTempFileName()
+    [System.IO.File]::WriteAllText($kiroTmp, ($kiroExisting | ConvertTo-Json -Depth 5 -Compress))
+    & $Python -c "import json,sys;d=json.load(open(sys.argv[1]));open(sys.argv[2],'w',encoding='utf-8').write(json.dumps(d,indent=2)+'\n')" $kiroTmp $KiroConf
+    Remove-Item $kiroTmp -ErrorAction SilentlyContinue
+
+    Write-Host "[$Tool] MCP config written -> $KiroConf"
+    Write-Host "[$Tool] MCP URL: http://127.0.0.1:$McpPort/mcp"
+    Write-Host ""
+
+    Set-Location $ProjectPath
+    Write-Host "[$Tool] Starting kiro-cli..."
+    Write-Host ""
+    kiro-cli chat --trust-all-tools
+}
+
+# -- Command Code: register MCP and launch ------------------------------------
+if ($Assistant -eq "command-code") {
+    # Use 'command-code' binary to avoid conflict with Windows cmd.exe
+    $ccBin = "command-code"
+    if (-not (Get-Command command-code -ErrorAction SilentlyContinue)) {
+        Write-Host "[$Tool] command-code not found - installing..."
+        try { npm install -g command-code } catch {}
+        # Refresh PATH
+        $env:PATH = [System.Environment]::GetEnvironmentVariable("PATH", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("PATH", "User")
+        if (-not (Get-Command command-code -ErrorAction SilentlyContinue)) {
+            Write-Host "[$Tool] ERROR: could not auto-install command-code."
+            Write-Host "[$Tool]   npm install -g command-code"
+            Stop-Process -Id $mcpProc.Id -Force -ErrorAction SilentlyContinue
+            exit 1
+        }
+        Write-Host "[$Tool] command-code installed."
+    }
+
+    # Register MCP via command-code mcp add (user scope so it works across projects)
+    $ccUrl = "http://127.0.0.1:$McpPort/mcp"
+    Write-Host "[$Tool] Registering dual-graph MCP server with Command Code..."
+    & $ccBin mcp add --transport http dual-graph $ccUrl --scope user 2>$null
+    if ($LASTEXITCODE -ne 0) {
+        # Fallback: write directly to ~/.commandcode/mcp.json
+        $CcDir = Join-Path $env:USERPROFILE ".commandcode"
+        New-Item -ItemType Directory -Force -Path $CcDir | Out-Null
+        $CcConf = Join-Path $CcDir "mcp.json"
+        $ccExisting = [PSCustomObject]@{ mcpServers = [PSCustomObject]@{} }
+        if (Test-Path $CcConf) {
+            try {
+                $parsed = Get-Content $CcConf -Raw | ConvertFrom-Json
+                if ($parsed) { $ccExisting = $parsed }
+            } catch {}
+        }
+        if (-not $ccExisting.mcpServers) {
+            $ccExisting | Add-Member -NotePropertyName "mcpServers" -NotePropertyValue ([PSCustomObject]@{}) -Force
+        }
+        $ccExisting.mcpServers | Add-Member -NotePropertyName "dual-graph" `
+            -NotePropertyValue ([PSCustomObject]@{ transport = "http"; url = $ccUrl }) -Force
+        $ccTmp = [System.IO.Path]::GetTempFileName()
+        [System.IO.File]::WriteAllText($ccTmp, ($ccExisting | ConvertTo-Json -Depth 5 -Compress))
+        & $Python -c "import json,sys;d=json.load(open(sys.argv[1]));open(sys.argv[2],'w',encoding='utf-8').write(json.dumps(d,indent=2)+'\n')" $ccTmp $CcConf
+        Remove-Item $ccTmp -ErrorAction SilentlyContinue
+        Write-Host "[$Tool] MCP config written -> $CcConf"
+    } else {
+        Write-Host "[$Tool] MCP server registered via cmd CLI."
+    }
+    Write-Host "[$Tool] MCP URL: $ccUrl"
+
+    # Write/append AGENTS.md (Command Code reads rules from AGENTS.md)
+    $AgentsFile = Join-Path $ProjectPath "AGENTS.md"
+    $CcPolicyMarker = "dgc-policy-v11"
+    if ((-not (Test-Path $AgentsFile)) -or (-not (Select-String -Path $AgentsFile -Pattern $CcPolicyMarker -Quiet))) {
+        Write-Host "[$Tool] Writing AGENTS.md policy ..."
+        & $Python -c 'import sys,os;f=sys.argv[1];m=sys.argv[2];existed=os.path.exists(f);content=open(f,"r",encoding="utf-8").read() if existed else "";sep="\n\n" if content and not content.endswith("\n\n") else ("\n" if content and not content.endswith("\n") else "");policy="<!-- "+m+" -->\n# Dual-Graph Context Policy\n\nThis project uses a local dual-graph MCP server for efficient context retrieval.\n\n## MANDATORY: Always follow this order\n\n1. **Call `graph_continue` first** - before any file exploration, grep, or code reading.\n2. **If `graph_continue` returns `needs_project=true`**: call `graph_scan` with the current project directory. Do NOT ask the user.\n3. **If `graph_continue` returns `skip=true`**: project has fewer than 5 files. Do NOT do broad exploration.\n4. **Read `recommended_files`** using `graph_read` - one call per file.\n5. **Check `confidence`** and obey the caps strictly:\n   - high -> Stop. Do NOT grep or explore further.\n   - medium -> At most 2 supplementary greps, then 2 additional files. Then stop.\n   - low -> At most 3 supplementary greps, then 3 additional files. Then stop.\n\n## Rules\n\n- Do NOT use grep or file exploration before calling `graph_continue`.\n- Do NOT do broad/recursive exploration at any confidence level.\n- After edits, call `graph_register_edit(files: [\"path/to/file\"])`.\n";open(f,"w",encoding="utf-8").write(content+sep+policy)' $AgentsFile $CcPolicyMarker
+        Write-Host "[$Tool] AGENTS.md updated."
+    }
+
+    Write-Host ""
+    Set-Location $ProjectPath
+    Write-Host "[$Tool] Starting Command Code..."
+    Write-Host ""
+    & $ccBin
 }
 
 # Cleanup

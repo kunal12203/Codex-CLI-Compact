@@ -629,6 +629,14 @@ elif [[ "$ASSISTANT" == "openclaw" ]]; then
   DOC_FILE="$PROJECT/AGENTS.md"
   DOC_NAME="AGENTS.md"
   POLICY_MARKER="dgc-policy-v11"
+elif [[ "$ASSISTANT" == "kiro" ]]; then
+  DOC_FILE="$PROJECT/AGENTS.md"
+  DOC_NAME="AGENTS.md"
+  POLICY_MARKER="dgc-policy-v11"
+elif [[ "$ASSISTANT" == "command-code" ]]; then
+  DOC_FILE="$PROJECT/AGENTS.md"
+  DOC_NAME="AGENTS.md"
+  POLICY_MARKER="dgc-policy-v11"
 else
   # claude, copilot share CLAUDE.md as their context policy file
   DOC_FILE="$PROJECT/CLAUDE.md"
@@ -2370,6 +2378,97 @@ PY
   echo "[$TOOL_LABEL] MCP URL: $_OC_URL"
 fi
 
+# -- Kiro CLI: write .kiro/settings/mcp.json and launch -----------------------
+if [[ "$ASSISTANT" == "kiro" ]]; then
+  CURRENT_STEP="Registering MCP (Kiro CLI)"
+
+  if ! command -v kiro-cli &>/dev/null; then
+    echo "[$TOOL_LABEL] kiro-cli not found — installing..."
+    if command -v brew &>/dev/null; then
+      brew install --cask kiro 2>/dev/null || true
+    fi
+    export PATH="$PATH:$HOME/.local/bin:/usr/local/bin"
+    if ! command -v kiro-cli &>/dev/null; then
+      echo "[$TOOL_LABEL] ERROR: could not auto-install kiro-cli."
+      echo "[$TOOL_LABEL]   Visit https://kiro.dev/downloads/ to install manually."
+      _send_cli_error "Registering MCP" "kiro-cli not found, auto-install failed"
+      exit 1
+    fi
+    echo "[$TOOL_LABEL] kiro-cli installed."
+  fi
+
+  # Write .kiro/settings/mcp.json (workspace scope)
+  mkdir -p "$PROJECT/.kiro/settings"
+  "$PYTHON" - "$PROJECT/.kiro/settings/mcp.json" "$MCP_PORT" <<'PY'
+import json, sys, os
+config_file = sys.argv[1]
+port = sys.argv[2]
+existing = {}
+if os.path.exists(config_file):
+    try:
+        with open(config_file, "r", encoding="utf-8") as f:
+            existing = json.load(f)
+    except Exception:
+        pass
+servers = existing.get("mcpServers", {})
+servers["dual-graph"] = {"url": f"http://127.0.0.1:{port}/mcp"}
+existing["mcpServers"] = servers
+with open(config_file, "w", encoding="utf-8") as f:
+    json.dump(existing, f, indent=2)
+    f.write("\n")
+PY
+  echo "[$TOOL_LABEL] MCP config written -> $PROJECT/.kiro/settings/mcp.json"
+  echo "[$TOOL_LABEL] MCP URL: http://127.0.0.1:$MCP_PORT/mcp"
+fi
+
+# -- Command Code: register MCP and launch ------------------------------------
+if [[ "$ASSISTANT" == "command-code" ]]; then
+  CURRENT_STEP="Registering MCP (Command Code)"
+
+  if ! command -v cmd &>/dev/null || ! cmd --version 2>/dev/null | grep -qi "command.code"; then
+    echo "[$TOOL_LABEL] command-code (cmd) not found — installing..."
+    if command -v npm &>/dev/null; then
+      npm install -g command-code >/dev/null 2>&1 || true
+    fi
+    export PATH="$PATH:$(npm config get prefix 2>/dev/null)/bin:$HOME/.npm-global/bin:$HOME/.local/bin"
+    if ! command -v cmd &>/dev/null; then
+      echo "[$TOOL_LABEL] ERROR: could not auto-install command-code."
+      echo "[$TOOL_LABEL]   npm install -g command-code"
+      _send_cli_error "Registering MCP" "command-code CLI not found, auto-install failed"
+      exit 1
+    fi
+    echo "[$TOOL_LABEL] command-code installed."
+  fi
+
+  _CC_URL="http://127.0.0.1:$MCP_PORT/mcp"
+  if cmd mcp add --transport http dual-graph "$_CC_URL" --scope user 2>/dev/null; then
+    echo "[$TOOL_LABEL] MCP server registered via cmd CLI."
+  else
+    # Fallback: write directly to ~/.commandcode/mcp.json
+    mkdir -p "$HOME/.commandcode"
+    "$PYTHON" - "$HOME/.commandcode/mcp.json" "$MCP_PORT" <<'PY'
+import json, sys, os
+config_file = sys.argv[1]
+port = sys.argv[2]
+existing = {}
+if os.path.exists(config_file):
+    try:
+        with open(config_file, "r", encoding="utf-8") as f:
+            existing = json.load(f)
+    except Exception:
+        pass
+servers = existing.get("mcpServers", {})
+servers["dual-graph"] = {"transport": "http", "url": f"http://127.0.0.1:{port}/mcp"}
+existing["mcpServers"] = servers
+with open(config_file, "w", encoding="utf-8") as f:
+    json.dump(existing, f, indent=2)
+    f.write("\n")
+PY
+    echo "[$TOOL_LABEL] MCP config written -> ~/.commandcode/mcp.json"
+  fi
+  echo "[$TOOL_LABEL] MCP URL: $_CC_URL"
+fi
+
 # ── First-run: show all available commands ────────────────────────────────────
 _INSTALL_DATE_FILE="$SCRIPT_DIR/install_date.txt"
 if [[ ! -f "$_INSTALL_DATE_FILE" ]]; then
@@ -2387,6 +2486,8 @@ if [[ ! -f "$_INSTALL_DATE_FILE" ]]; then
   echo "  graperoot [path] --copilot      GitHub Copilot (VS Code)"
   echo "  graperoot [path] --antigravity  Google Antigravity"
   echo "  graperoot [path] --openclaw     OpenClaw"
+  echo "  graperoot [path] --kiro         Kiro CLI"
+  echo "  graperoot [path] --command-code Command Code"
   echo ""
   echo "  Shortcuts:"
   echo "    dgc [path]   →  graperoot [path] --claude"
@@ -2595,7 +2696,7 @@ fi
 # 3. Quick smoke test — verify CLI responds (catches broken installs, missing deps)
 # cursor is validated via CURSOR_BIN at registration time; skip --version check for it.
 _SMOKE_BIN="${CURSOR_BIN:-${CODE_BIN:-$ASSISTANT}}"
-if [[ "$ASSISTANT" != "cursor" && "$ASSISTANT" != "copilot" && "$ASSISTANT" != "antigravity" && "$ASSISTANT" != "openclaw" ]] && ! "$_SMOKE_BIN" --version &>/dev/null 2>&1; then
+if [[ "$ASSISTANT" != "cursor" && "$ASSISTANT" != "copilot" && "$ASSISTANT" != "antigravity" && "$ASSISTANT" != "openclaw" && "$ASSISTANT" != "kiro" && "$ASSISTANT" != "command-code" ]] && ! "$_SMOKE_BIN" --version &>/dev/null 2>&1; then
   echo "[$TOOL_LABEL] WARNING: '$ASSISTANT --version' failed. The CLI may not work correctly."
   case "$ASSISTANT" in
     claude)   echo "[$TOOL_LABEL] Try reinstalling: npm install -g @anthropic-ai/claude-code" ;;
@@ -2680,6 +2781,22 @@ elif [[ "$ASSISTANT" == "openclaw" ]]; then
   _OC_MODEL="${OPENCLAW_DEFAULT_MODEL:-amazon-bedrock/global.anthropic.claude-opus-4-6-v1}"
   _OC_SESSION="agent:main:graperoot-$(basename "$PROJECT")"
   openclaw agent --local --agent main --session-key "$_OC_SESSION" --model "$_OC_MODEL" --thinking off --message "$_OC_MSG" 2>"$RUN_DIR/assistant_stderr.log"
+elif [[ "$ASSISTANT" == "kiro" ]]; then
+  # Kiro CLI — launches interactive chat with trusted tools
+  trap 'echo ""; echo "[$TOOL_LABEL] Shutting down MCP server (PID $MCP_PID)..."; kill "$MCP_PID" 2>/dev/null; rm -f "$RUN_DIR/mcp_server.pid" "$RUN_DIR/mcp_port"; exit 130' INT TERM HUP
+  _LAUNCH_ARGS=(chat --trust-all-tools)
+  [[ -n "$PROMPT" ]] && _LAUNCH_ARGS+=("$PROMPT")
+  kiro-cli "${_LAUNCH_ARGS[@]}" 2>"$RUN_DIR/assistant_stderr.log"
+elif [[ "$ASSISTANT" == "command-code" ]]; then
+  # Command Code — launches interactive session
+  trap 'echo ""; echo "[$TOOL_LABEL] Shutting down MCP server (PID $MCP_PID)..."; kill "$MCP_PID" 2>/dev/null; rm -f "$RUN_DIR/mcp_server.pid" "$RUN_DIR/mcp_port"; exit 130' INT TERM HUP
+  _LAUNCH_ARGS=()
+  [[ -n "$PROMPT" ]] && _LAUNCH_ARGS+=("$PROMPT")
+  if [[ ${#_LAUNCH_ARGS[@]} -gt 0 ]]; then
+    cmd "${_LAUNCH_ARGS[@]}" 2>"$RUN_DIR/assistant_stderr.log"
+  else
+    cmd 2>"$RUN_DIR/assistant_stderr.log"
+  fi
 else
   # Build launch args: optional prompt + all passthrough flags
   _LAUNCH_ARGS=()

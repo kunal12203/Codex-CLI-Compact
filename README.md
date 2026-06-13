@@ -2,7 +2,7 @@
 
 **[graperoot.dev](https://graperoot.dev)** · [Docs](https://graperoot.dev/docs) · [Benchmarks](https://graperoot.dev/benchmarks) · [Pro](https://graperoot.dev/graperoot-pro) · [Discord](https://discord.com/invite/YwKdQATY2d) · [Troubleshooting](./TROUBLESHOOTING.md)
 
-A context engine that makes Claude Code, Codex CLI, Gemini CLI, Cursor, OpenCode, and GitHub Copilot **30-45% cheaper** without sacrificing quality. It builds a semantic graph of your codebase and pre-loads the right files into every prompt — so your AI spends tokens reasoning, not exploring.
+A context engine that makes Claude Code, Codex CLI, Gemini CLI, Cursor, OpenCode, Kiro CLI, Command Code, and GitHub Copilot **30-45% cheaper** without sacrificing quality. It builds a semantic graph of your codebase and pre-loads the right files into every prompt — so your AI spends tokens reasoning, not exploring.
 
 Works on **macOS, Linux, and Windows**. Supports any project size.
 
@@ -100,6 +100,8 @@ graperoot . --opencode           # OpenCode
 graperoot . --copilot            # GitHub Copilot
 graperoot . --antigravity        # Google Antigravity
 graperoot . --codex              # Codex CLI
+graperoot . --kiro               # Kiro CLI
+graperoot . --command-code       # Command Code
 graperoot /path/to/project --cursor           # specific project
 graperoot /path/to/project --gemini "add tests"  # with a prompt
 ```
