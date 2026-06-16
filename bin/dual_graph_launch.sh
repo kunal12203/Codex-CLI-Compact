@@ -1551,6 +1551,10 @@ fi
 
 echo "[$TOOL_LABEL] Scanning project..."
 CURRENT_STEP="Scanning project"
+
+# Snapshot existing info_graph.json before rescan (fail-safe — never blocks scan)
+"$PYTHON" "$SCRIPT_DIR/graph_snapshot.py" "$DATA_DIR" "auto" 2>/dev/null || true
+
 _SCAN_ERR_FILE="$DATA_DIR/scan_error.log"
 rm -f "$_SCAN_ERR_FILE" 2>/dev/null || true
 _SCAN_OK=0

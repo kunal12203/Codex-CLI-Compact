@@ -275,9 +275,10 @@ curl -sf  "$BASE_URL/bin/version.txt" -o "$INSTALL_DIR/version.txt" 2>/dev/null 
   || true
 
 echo "[install] Downloading CLI tools..."
-curl -fsSL "$BASE_URL/bin/dgc"       -o "$INSTALL_DIR/dgc"       && chmod +x "$INSTALL_DIR/dgc"
-curl -fsSL "$BASE_URL/bin/dg"        -o "$INSTALL_DIR/dg"        && chmod +x "$INSTALL_DIR/dg"
-curl -fsSL "$BASE_URL/bin/graperoot" -o "$INSTALL_DIR/graperoot" && chmod +x "$INSTALL_DIR/graperoot"
+curl -fsSL "$BASE_URL/bin/dgc"             -o "$INSTALL_DIR/dgc"             && chmod +x "$INSTALL_DIR/dgc"
+curl -fsSL "$BASE_URL/bin/dg"              -o "$INSTALL_DIR/dg"              && chmod +x "$INSTALL_DIR/dg"
+curl -fsSL "$BASE_URL/bin/graperoot"       -o "$INSTALL_DIR/graperoot"       && chmod +x "$INSTALL_DIR/graperoot"
+curl -fsSL "$BASE_URL/bin/graph_snapshot.py" -o "$INSTALL_DIR/graph_snapshot.py"
 
 echo "[install] Creating Python venv at $VENV ..."
 "$PYTHON" -m venv "$VENV"

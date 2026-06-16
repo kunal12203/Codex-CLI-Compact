@@ -50,4 +50,3 @@ dump.rdb
 .dual-graph-context/
 benchmark/dgc-claude/
 benchmark/normal-claude/
-.dual-graph/
