@@ -133,6 +133,7 @@ dgc /path/to/project "fix the login bug" # start with a prompt
 dg                              # scan current directory
 dg /path/to/project             # scan a specific project
 dg /path/to/project "add tests" # start with a prompt
+dg --model=minimax /path/to/project # use MiniMax-M3 via MiniMax's OpenAI-compatible API
 ```
 
 ### Interactive Picker (new in v3.9.99)

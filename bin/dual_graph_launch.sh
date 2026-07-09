@@ -212,7 +212,7 @@ RESUME_ID=""
 PROMPT=""
 CLAUDE_EXTRA_ARGS=()
 _PROJECT_SET=false
-FAILOVER_MODEL=""  # set by --model=codex|local|gemini|opencode
+FAILOVER_MODEL=""  # set by --model=codex|local|gemini|opencode|minimax
 NO_GITIGNORE=false
 CONTEXT_POLICY_FILE=""
 RUNTIME_TOOLNAME_RAW=""
@@ -222,7 +222,7 @@ _FILTERED=()
 for _fa in "$@"; do
   if [[ "$_fa" == --model=codex || "$_fa" == --model=local || "$_fa" == --model=ollama \
      || "$_fa" == --model=gemini || "$_fa" == --model=opencode || "$_fa" == --model=antigravity \
-     || "$_fa" == --model=openclaw ]]; then
+     || "$_fa" == --model=openclaw || "$_fa" == --model=minimax ]]; then
     FAILOVER_MODEL="${_fa#--model=}"
   else
     _FILTERED+=("$_fa")
@@ -269,6 +269,11 @@ if [[ -n "$FAILOVER_MODEL" ]]; then
     opencode)        ASSISTANT="opencode" ;;
     antigravity)     ASSISTANT="antigravity" ;;
     openclaw)        ASSISTANT="openclaw" ;;
+    minimax)
+      ASSISTANT="codex"
+      export OPENAI_BASE_URL="${OPENAI_BASE_URL:-https://api.minimax.io/v1}"
+      export OPENAI_DEFAULT_MODEL="${OPENAI_DEFAULT_MODEL:-MiniMax-M3}"
+      ;;
     local|ollama)
       ASSISTANT="codex"
       export OPENAI_BASE_URL="http://localhost:11434/v1"
