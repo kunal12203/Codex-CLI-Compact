@@ -212,7 +212,7 @@ RESUME_ID=""
 PROMPT=""
 CLAUDE_EXTRA_ARGS=()
 _PROJECT_SET=false
-FAILOVER_MODEL=""  # set by --model=codex|local|gemini|opencode|minimax
+FAILOVER_MODEL=""  # set by --model=codex|local|gemini|opencode|minimax*
 NO_GITIGNORE=false
 CONTEXT_POLICY_FILE=""
 RUNTIME_TOOLNAME_RAW=""
@@ -220,13 +220,16 @@ RUNTIME_TOOLNAME_RAW=""
 # ── Strip --model flag before Claude's own flag parser sees it ────────────────
 _FILTERED=()
 for _fa in "$@"; do
-  if [[ "$_fa" == --model=codex || "$_fa" == --model=local || "$_fa" == --model=ollama \
-     || "$_fa" == --model=gemini || "$_fa" == --model=opencode || "$_fa" == --model=antigravity \
-     || "$_fa" == --model=openclaw || "$_fa" == --model=minimax ]]; then
-    FAILOVER_MODEL="${_fa#--model=}"
-  else
-    _FILTERED+=("$_fa")
-  fi
+  case "$_fa" in
+    --model=codex|--model=local|--model=ollama|--model=gemini|--model=opencode|\
+    --model=antigravity|--model=openclaw|--model=minimax|--model=minimax-m3|\
+    --model=MiniMax-M3|--model=minimax-m2.7|--model=MiniMax-M2.7)
+      FAILOVER_MODEL="${_fa#--model=}"
+      ;;
+    *)
+      _FILTERED+=("$_fa")
+      ;;
+  esac
 done
 [[ ${#_FILTERED[@]} -gt 0 ]] && set -- "${_FILTERED[@]}"
 
@@ -269,10 +272,45 @@ if [[ -n "$FAILOVER_MODEL" ]]; then
     opencode)        ASSISTANT="opencode" ;;
     antigravity)     ASSISTANT="antigravity" ;;
     openclaw)        ASSISTANT="openclaw" ;;
-    minimax)
-      ASSISTANT="codex"
-      export OPENAI_BASE_URL="${OPENAI_BASE_URL:-https://api.minimax.io/v1}"
-      export OPENAI_DEFAULT_MODEL="${OPENAI_DEFAULT_MODEL:-MiniMax-M3}"
+    minimax|MiniMax-M3|minimax-m3|MiniMax-M2.7|minimax-m2.7)
+      case "$FAILOVER_MODEL" in
+        minimax|MiniMax-M3|minimax-m3) _MINIMAX_MODEL="MiniMax-M3" ;;
+        *)                              _MINIMAX_MODEL="MiniMax-M2.7" ;;
+      esac
+      case "${MINIMAX_REGION:-global_en}" in
+        global_en)
+          _MINIMAX_OPENAI_BASE_URL="https://api.minimax.io/v1"
+          _MINIMAX_ANTHROPIC_BASE_URL="https://api.minimax.io/anthropic/v1"
+          ;;
+        cn_zh)
+          _MINIMAX_OPENAI_BASE_URL="https://api.minimaxi.com/v1"
+          _MINIMAX_ANTHROPIC_BASE_URL="https://api.minimaxi.com/anthropic/v1"
+          ;;
+        *)
+          echo "[dgc] MINIMAX_REGION must be global_en or cn_zh" >&2
+          exit 2
+          ;;
+      esac
+      case "${MINIMAX_API_MODE:-openai}" in
+        openai)
+          ASSISTANT="codex"
+          export OPENAI_BASE_URL="$_MINIMAX_OPENAI_BASE_URL"
+          [[ -n "${MINIMAX_API_KEY:-}" ]] && export OPENAI_API_KEY="$MINIMAX_API_KEY"
+          ;;
+        anthropic)
+          ASSISTANT="claude"
+          export ANTHROPIC_BASE_URL="$_MINIMAX_ANTHROPIC_BASE_URL"
+          if [[ -n "${MINIMAX_API_KEY:-}" ]]; then
+            export ANTHROPIC_API_KEY="$MINIMAX_API_KEY"
+            export ANTHROPIC_AUTH_TOKEN="$MINIMAX_API_KEY"
+          fi
+          ;;
+        *)
+          echo "[dgc] MINIMAX_API_MODE must be openai or anthropic" >&2
+          exit 2
+          ;;
+      esac
+      CLAUDE_EXTRA_ARGS+=(--model "$_MINIMAX_MODEL")
       ;;
     local|ollama)
       ASSISTANT="codex"
