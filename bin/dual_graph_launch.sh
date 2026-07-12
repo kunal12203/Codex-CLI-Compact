@@ -280,11 +280,11 @@ if [[ -n "$FAILOVER_MODEL" ]]; then
       case "${MINIMAX_REGION:-global_en}" in
         global_en)
           _MINIMAX_OPENAI_BASE_URL="https://api.minimax.io/v1"
-          _MINIMAX_ANTHROPIC_BASE_URL="https://api.minimax.io/anthropic/v1"
+          _MINIMAX_ANTHROPIC_BASE_URL="https://api.minimax.io/anthropic"
           ;;
         cn_zh)
           _MINIMAX_OPENAI_BASE_URL="https://api.minimaxi.com/v1"
-          _MINIMAX_ANTHROPIC_BASE_URL="https://api.minimaxi.com/anthropic/v1"
+          _MINIMAX_ANTHROPIC_BASE_URL="https://api.minimaxi.com/anthropic"
           ;;
         *)
           echo "[dgc] MINIMAX_REGION must be global_en or cn_zh" >&2

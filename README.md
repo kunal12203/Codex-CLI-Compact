@@ -153,8 +153,8 @@ set it to `anthropic` to use the Anthropic-compatible endpoint.
 
 | Region | OpenAI-compatible base URL | Anthropic-compatible base URL |
 |--------|----------------------------|-------------------------------|
-| `global_en` | `https://api.minimax.io/v1` | `https://api.minimax.io/anthropic/v1` |
-| `cn_zh` | `https://api.minimaxi.com/v1` | `https://api.minimaxi.com/anthropic/v1` |
+| `global_en` | `https://api.minimax.io/v1` | `https://api.minimax.io/anthropic` |
+| `cn_zh` | `https://api.minimaxi.com/v1` | `https://api.minimaxi.com/anthropic` |
 
 ```bash
 MINIMAX_REGION=cn_zh dg --model=minimax-m3 /path/to/project
