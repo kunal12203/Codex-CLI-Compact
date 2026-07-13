@@ -274,9 +274,19 @@ if [[ -n "$FAILOVER_MODEL" ]]; then
     openclaw)        ASSISTANT="openclaw" ;;
     minimax|MiniMax-M3|minimax-m3|MiniMax-M2.7|minimax-m2.7)
       case "$FAILOVER_MODEL" in
-        minimax|MiniMax-M3|minimax-m3) _MINIMAX_MODEL="MiniMax-M3" ;;
-        *)                              _MINIMAX_MODEL="MiniMax-M2.7" ;;
+        minimax|MiniMax-M3|minimax-m3)
+          _MINIMAX_MODEL="MiniMax-M3"
+          _MINIMAX_CONTEXT_WINDOW=1000000
+          ;;
+        *)
+          _MINIMAX_MODEL="MiniMax-M2.7"
+          _MINIMAX_CONTEXT_WINDOW=204800
+          ;;
       esac
+      if [[ -z "${MINIMAX_API_KEY:-}" ]]; then
+        echo "[dgc] MINIMAX_API_KEY must be set" >&2
+        exit 2
+      fi
       case "${MINIMAX_REGION:-global_en}" in
         global_en)
           _MINIMAX_OPENAI_BASE_URL="https://api.minimax.io/v1"
@@ -294,23 +304,29 @@ if [[ -n "$FAILOVER_MODEL" ]]; then
       case "${MINIMAX_API_MODE:-openai}" in
         openai)
           ASSISTANT="codex"
-          export OPENAI_BASE_URL="$_MINIMAX_OPENAI_BASE_URL"
-          [[ -n "${MINIMAX_API_KEY:-}" ]] && export OPENAI_API_KEY="$MINIMAX_API_KEY"
+          CLAUDE_EXTRA_ARGS+=(
+            --model "$_MINIMAX_MODEL"
+            -c 'model_provider="minimax"'
+            -c 'model_providers.minimax.name="MiniMax"'
+            -c "model_providers.minimax.base_url=\"$_MINIMAX_OPENAI_BASE_URL\""
+            -c 'model_providers.minimax.env_key="MINIMAX_API_KEY"'
+            -c 'model_providers.minimax.wire_api="responses"'
+            -c "model_context_window=$_MINIMAX_CONTEXT_WINDOW"
+          )
           ;;
         anthropic)
           ASSISTANT="claude"
           export ANTHROPIC_BASE_URL="$_MINIMAX_ANTHROPIC_BASE_URL"
-          if [[ -n "${MINIMAX_API_KEY:-}" ]]; then
-            export ANTHROPIC_API_KEY="$MINIMAX_API_KEY"
-            export ANTHROPIC_AUTH_TOKEN="$MINIMAX_API_KEY"
-          fi
+          unset ANTHROPIC_API_KEY
+          export ANTHROPIC_AUTH_TOKEN="$MINIMAX_API_KEY"
+          export CLAUDE_CODE_AUTO_COMPACT_WINDOW="$_MINIMAX_CONTEXT_WINDOW"
+          CLAUDE_EXTRA_ARGS+=(--model "$_MINIMAX_MODEL")
           ;;
         *)
           echo "[dgc] MINIMAX_API_MODE must be openai or anthropic" >&2
           exit 2
           ;;
       esac
-      CLAUDE_EXTRA_ARGS+=(--model "$_MINIMAX_MODEL")
       ;;
     local|ollama)
       ASSISTANT="codex"

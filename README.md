@@ -149,7 +149,9 @@ dg --model=minimax-m2.7 /path/to/project
 
 `MINIMAX_REGION` selects the endpoint region and defaults to `global_en`.
 `MINIMAX_API_MODE` selects the compatible API mode and defaults to `openai`;
-set it to `anthropic` to use the Anthropic-compatible endpoint.
+set it to `anthropic` to use the Anthropic-compatible endpoint. The launcher
+uses a 1,000,000-token context window for `MiniMax-M3` and a 204,800-token
+context window for `MiniMax-M2.7`.
 
 | Region | OpenAI-compatible base URL | Anthropic-compatible base URL |
 |--------|----------------------------|-------------------------------|
